@@ -26,7 +26,7 @@ import threading
 import time
 from pathlib import Path
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 
 DOSSIER_STARTER = Path(__file__).resolve().parent.parent
 DOSSIER_SCENARIOS = DOSSIER_STARTER / "scenarios"
@@ -34,7 +34,8 @@ CONTROLEUR_EXEMPLE = DOSSIER_STARTER / "controleur_exemple" / "controleur.py"
 
 MINUTES_PAR_JOUR = 1440
 PLAGE_CONFORT = (23.0, 26.0)
-BUDGET_MINUTES_PERSONNE = 30
+BUDGET_MINUTES_PAR_OCCUPANT = 7.5  # budget de confort : 45 minutes-personne pour 6 occupants prévus
+BUDGET_SANS_PLANNING = 30
 
 # Pièce : deux réservoirs de chaleur (air, masse). Valeurs calées pour un bureau
 # de 30 m² en béton : voir COMPORTEMENT.md. Un scénario peut les surcharger dans "piece".
@@ -43,9 +44,9 @@ PHYSIQUE = {
     "c_masse": 12e6,  # J/K, dalle + murs
     "ua_air_masse": 500.0,  # W/K
     "ua_air_ext": 100.0,  # W/K, vitrage + fuites
-    "ua_masse_ext": 250.0,  # W/K
+    "ua_masse_ext": 150.0,  # W/K
     "ua_air_neuf_par_occupant": 8.0,  # W/K
-    "ua_fenetre_ouverte": 400.0,  # W/K ajoutés quand une fenêtre est ouverte
+    "ua_fenetre_ouverte": 250.0,  # W/K ajoutés quand une fenêtre est ouverte
     "w_par_occupant": 180.0,  # 100 W la personne + 80 W son poste
     "w_eclairage": 240.0,
     "w_solaire_max": 800.0,
@@ -91,6 +92,7 @@ PHRASES_FROID = [
     "j'ai les doigts gelés",
 ]
 
+CHAMPS_REPONSE = {"marche", "consigne", "ventilation", "reponses", "journal"}
 TYPES_EVENEMENTS = ("panne_sonde", "fenetre_ouverte", "pir_aveugle", "absence", "presence", "visiteurs")
 MODES_PANNE = ("derive", "figee", "absente", "pic", "soleil")
 
@@ -101,6 +103,10 @@ COLONNES_DIRECT = [
     "messages", "reponses", "journal", "erreur", "temps_reponse_ms",
 ]
 COLONNES_VERITE = ["t_reelle", "t_masse", "presence_reelle", "puissance_froid_w", "eer", "inconfort", "evenements"]
+
+
+# Deux bilans ne se comparent que s'ils viennent du même simulateur, à la ligne près.
+EMPREINTE_SIMULATEUR = hashlib.sha256(Path(__file__).read_bytes().replace(b"\r\n", b"\n")).hexdigest()[:12]
 
 
 class ErreurScenario(Exception):
@@ -374,6 +380,7 @@ class ControleurProcessus:
         self.delai_init = delai_init
         self.debug = debug
         self.derniere_ligne = ""
+        self.avertissement = ""
         self._en_retard = 0
         self._lignes = queue.Queue()
         environnement = dict(os.environ, PYTHONUNBUFFERED="1", PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
@@ -397,6 +404,12 @@ class ControleurProcessus:
         self._lignes.put(None)
 
     def _echanger(self, message, delai):
+        """Envoie un message et renvoie la réponse : la première ligne reçue qui est un objet JSON.
+
+        Toute autre ligne (un print() de debug, par exemple) est ignorée et signalée dans
+        self.avertissement, pour ne jamais décaler les réponses d'une minute sur la suivante.
+        """
+        self.avertissement = ""
         self.derniere_ligne = json.dumps(message, ensure_ascii=False)
         if self.debug:
             print("→ " + self.derniere_ligne, file=sys.stderr)
@@ -417,12 +430,21 @@ class ControleurProcessus:
                 raise DelaiDepasse()
             if ligne is None:
                 raise ControleurArrete(self._diagnostic())
+            if self.debug:
+                print("← " + ligne.rstrip("\n"), file=sys.stderr)
+            try:
+                reponse = json.loads(ligne)
+            except json.JSONDecodeError:
+                reponse = None
+            if not isinstance(reponse, dict):
+                if ligne.strip() and not self.avertissement:
+                    self.avertissement = (
+                        "ligne ignorée sur la sortie standard, réservée au protocole : %r" % ligne.strip()[:80])
+                continue
             if self._en_retard:
                 self._en_retard -= 1
                 continue
-            if self.debug:
-                print("← " + ligne.rstrip("\n"), file=sys.stderr)
-            return ligne
+            return reponse
 
     def _diagnostic(self):
         code = self._processus.poll()
@@ -442,11 +464,7 @@ class ControleurProcessus:
             )
 
     def decider(self, etat):
-        ligne = self._echanger(etat, self.delai_pas)
-        try:
-            return json.loads(ligne)
-        except json.JSONDecodeError:
-            return ligne.strip()  # sera signalé comme réponse invalide
+        return self._echanger(etat, self.delai_pas)
 
     def terminer(self):
         if self._processus.stdin.closed:
@@ -474,6 +492,9 @@ def _lire_reponse(reponse, commande, messages_connus):
     reponses, journal = [], ""
     if not isinstance(reponse, dict):
         return reponses, journal, "réponse invalide : il faut un objet JSON"
+    inconnus = sorted(set(reponse) - CHAMPS_REPONSE)
+    if inconnus:
+        erreurs.append("champ inconnu : %s" % ", ".join(str(c) for c in inconnus))
     if "marche" in reponse:
         if isinstance(reponse["marche"], bool):
             commande["marche"] = reponse["marche"]
@@ -529,7 +550,9 @@ class Journee:
         for evenement in scenario["evenements"]:
             debut = minute_de(evenement["heure"])
             self.evenements.append((debut, debut + evenement["duree"], evenement))
-        graine = scenario["graine"]
+        # L'aléa dépend de tout le scénario, pas seulement de sa graine : connaître la graine
+        # d'un scénario public ne permet pas de prédire le bruit d'un autre.
+        graine = "%s-%s" % (scenario["graine"], empreinte(scenario))
         # Des tirages séparés : les plaintes ne décalent jamais le bruit des sondes.
         self.alea_sondes = random.Random("%s-sondes" % graine)
         self.alea_plaintes = random.Random("%s-plaintes" % graine)
@@ -627,7 +650,7 @@ class Journee:
 
         Renvoie l'état de la clim pendant cette minute.
         """
-        consigne = min(CLIM_CONSIGNE_MAX, max(CLIM_CONSIGNE_MIN, round(commande["consigne"] * 2) / 2))
+        consigne = min(CLIM_CONSIGNE_MAX, max(CLIM_CONSIGNE_MIN, math.floor(commande["consigne"] * 2 + 0.5) / 2))
         # Sans sonde de pièce, la clim se rabat sur sa sonde de reprise.
         lecture = t_piece if t_piece is not None else t_reprise
         if lecture is not None:
@@ -725,7 +748,6 @@ def _simuler(scenario, controleur, plaintes_auto, jusqu, a_chaque_pas, messages_
     controleur.initialiser({
         "type": "init",
         "version": VERSION,
-        "scenario": scenario["nom"],
         "limites": dict(limites),
         "plage_confort": list(PLAGE_CONFORT),
         "occupants": [o["id"] for o in journee.occupants],
@@ -773,7 +795,7 @@ def _simuler(scenario, controleur, plaintes_auto, jusqu, a_chaque_pas, messages_
             gene[occupant["id"]] = gene[occupant["id"]] + 1 if abs(ecart_perso) > occupant["tolerance"] else 0
             if plaintes_auto and gene[occupant["id"]] >= PLAINTE_APRES_MIN and minute >= prochaine_plainte[occupant["id"]]:
                 texte = journee.alea_plaintes.choice(PHRASES_CHAUD if ecart_perso > 0 else PHRASES_FROID)
-                plaintes.append((minute, ajouter(occupant["id"], texte, "auto")))
+                plaintes.append((minute, ajouter(occupant["id"], texte, "auto"), ecart_perso > 0))
                 prochaine_plainte[occupant["id"]] = minute + PLAINTE_PAUSE_MIN
         for occupant in journee.occupants:
             if occupant["id"] not in ids_presents:
@@ -797,14 +819,17 @@ def _simuler(scenario, controleur, plaintes_auto, jusqu, a_chaque_pas, messages_
         except DelaiDepasse:
             erreur = "délai dépassé : dernière commande conservée"
             total["delais"] += 1
+        avertissement = getattr(controleur, "avertissement", "")
+        if avertissement:
+            erreur = " ; ".join(e for e in (avertissement, erreur) if e)
         temps_ms = (time.monotonic() - depart) * 1000.0
         total["temps_max_ms"] = max(total["temps_max_ms"], temps_ms)
         if erreur:
             total["erreurs"] += 1
-        messages_repondus.update(r["message"] for r in reponses)
-        commandes.append((commande["marche"], commande["consigne"]))
-
+        messages_repondus.update(r["message"] for r in reponses if r["texte"].strip())
         etat_clim = journee.regler_clim(commande, t_piece, t_reprise, minute)
+        # On retient la consigne appliquée par la clim : une variation de 0,01 °C n'est pas une action.
+        commandes.append((etat_clim["marche"], etat_clim["consigne"]))
         total["kwh"] += etat_clim["electrique_w"] / 60000.0
 
         inconfort = ""
@@ -842,16 +867,26 @@ def _simuler(scenario, controleur, plaintes_auto, jusqu, a_chaque_pas, messages_
             a_chaque_pas(ligne)
         journee.avancer(minute, nb_reel, etat_clim["froid_w"], etat_clim["compresseur"])
 
+    # Une plainte a un effet si l'assistant y répond, ou s'il agit dans le bon sens sous 15 minutes.
     sans_effet = 0
-    for minute, _identifiant in plaintes:
-        avant = commandes[minute - 1] if minute else (False, 25.0)
-        if all(c == avant for c in commandes[minute:minute + PLAINTE_EFFET_MIN + 1]):
+    for minute, identifiant, trop_chaud in plaintes:
+        marche_avant, consigne_avant = commandes[minute - 1] if minute else (False, 25.0)
+        if trop_chaud:
+            bon_sens = any((marche and not marche_avant) or consigne < consigne_avant
+                           for marche, consigne in commandes[minute:minute + PLAINTE_EFFET_MIN + 1])
+        else:
+            bon_sens = any((marche_avant and not marche) or consigne > consigne_avant
+                           for marche, consigne in commandes[minute:minute + PLAINTE_EFFET_MIN + 1])
+        if not bon_sens and identifiant not in messages_repondus:
             sans_effet += 1
 
+    prevus = max([creneau["nb"] for creneau in scenario["planning"]] or [0])
+    budget = int(BUDGET_MINUTES_PAR_OCCUPANT * prevus + 0.5) if prevus else BUDGET_SANS_PLANNING
     bilan = {
         "simulateur": VERSION,
         "scenario": scenario["nom"],
         "empreinte_scenario": empreinte(scenario),
+        "empreinte_simulateur": EMPREINTE_SIMULATEUR,
         "graine": scenario["graine"],
         "jusqu": heure_de(jusqu),
         "kwh": round(total["kwh"], 3),
@@ -863,8 +898,8 @@ def _simuler(scenario, controleur, plaintes_auto, jusqu, a_chaque_pas, messages_
         "t_max_en_presence": None if total["t_max"] is None else round(total["t_max"], 1),
         "t_min_en_presence": None if total["t_min"] is None else round(total["t_min"], 1),
         "budget_confort": {
-            "limite_minutes_personne": BUDGET_MINUTES_PERSONNE,
-            "respecte": total["minutes_personne"] <= BUDGET_MINUTES_PERSONNE,
+            "limite_minutes_personne": budget,
+            "respecte": total["minutes_personne"] <= budget,
         },
         "messages": total["messages"],
         "messages_sans_reponse": len(messages_connus - messages_repondus),
@@ -872,6 +907,7 @@ def _simuler(scenario, controleur, plaintes_auto, jusqu, a_chaque_pas, messages_
         "plaintes_sans_effet": sans_effet,
         "minutes_hors_limites_client": total["hors_limites"],
         "demarrages_compresseur": journee.demarrages,
+        "changements_de_consigne": sum(1 for avant, apres in zip(commandes, commandes[1:]) if avant[1] != apres[1]),
         "erreurs_controleur": total["erreurs"],
         "delais_depasses": total["delais"],
     }
@@ -983,7 +1019,7 @@ def resume(bilan, controleur):
 
     budget = bilan["budget_confort"]
     lignes = [
-        "COOL RUNNER · simulateur %s" % bilan["simulateur"],
+        "COOL RUNNER · simulateur %s (%s)" % (bilan["simulateur"], bilan["empreinte_simulateur"]),
         "Scénario   : %s (empreinte %s)%s" % (
             bilan["scenario"], bilan["empreinte_scenario"],
             "" if bilan["jusqu"] == "24:00" else " · arrêté à %s" % bilan["jusqu"]),
@@ -1002,6 +1038,7 @@ def resume(bilan, controleur):
         "  %-34s %10s" % ("Messages reçus / sans réponse", "%d / %d" % (bilan["messages"], bilan["messages_sans_reponse"])),
         ligne("Minutes hors limites client", "minutes_hors_limites_client"),
         ligne("Démarrages du compresseur", "demarrages_compresseur"),
+        "  %-34s %10s" % ("Changements de consigne", bilan["changements_de_consigne"]),
     ]
     if bilan["erreurs_controleur"]:
         lignes.append("  ⚠ %d réponse(s) du contrôleur en erreur, dont %d délai(s) dépassé(s) : voir la colonne « erreur » du CSV"
@@ -1084,7 +1121,12 @@ def main(arguments=None):
         if options.verifier:
             return 0 if verifier() else 1
         if options.dire:
-            FileDirecte(Path(options.sortie) / "direct.jsonl").ajouter(options.dire)
+            file_directe = FileDirecte(Path(options.sortie) / "direct.jsonl")
+            if not file_directe.chemin.is_file():
+                print("✘ aucune démo en cours dans « %s » : lance d'abord simulate.py --live (avec le même --sortie)"
+                      % options.sortie, file=sys.stderr)
+                return 2
+            file_directe.ajouter(options.dire)
             print("phrase ajoutée à la démo en cours")
             return 0
 
@@ -1094,6 +1136,9 @@ def main(arguments=None):
         commande = options.controleur or '"%s" "%s"' % (sys.executable, CONTROLEUR_EXEMPLE)
         nom_controleur = options.controleur or "contrôleur exemple (thermostat à 18 °C)"
         dossier = Path(options.sortie) / scenario["nom"]
+        for ancien in ("bilan.json", "journee.csv"):  # un run qui échoue ne doit pas laisser l'ancien bilan
+            if (dossier / ancien).is_file():
+                (dossier / ancien).unlink()
         controleur = ControleurProcessus(commande, delai_pas=options.delai, debug=options.debug)
         direct = JournalDirect(dossier)
         file_directe = FileDirecte(Path(options.sortie) / "direct.jsonl", vider=True) if options.live else None
@@ -1119,6 +1164,8 @@ def main(arguments=None):
                 a_chaque_pas=a_chaque_pas, messages_live=file_directe.nouvelles if file_directe else None)
         finally:
             direct.fermer()
+            if file_directe and file_directe.chemin.is_file():
+                file_directe.chemin.unlink()  # la démo est finie : --dire ne doit plus rien accepter
         ecrire_resultats(dossier, resultat)
         print(resume(resultat["bilan"], nom_controleur))
         print("\nRésultats : %s (journee.csv, bilan.json, direct.csv) · réponse la plus lente : %s ms"
