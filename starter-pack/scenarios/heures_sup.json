@@ -1,0 +1,11 @@
+{
+  "base": "journee_type",
+  "description": "Deux personnes arrivent à 6h45, deux autres restent jusqu'à 20h. Rien de tout ça n'est au planning.",
+  "phrases": [
+    {"heure": "17:25", "occupant": "maya", "texte": "je reste avec hugo jusqu'à 20h pour finir le dossier"}
+  ],
+  "evenements": [
+    {"type": "presence", "heure": "06:45", "duree": 75, "occupants": ["lea", "tom"]},
+    {"type": "presence", "heure": "17:30", "duree": 150, "occupants": ["maya", "hugo"]}
+  ]
+}

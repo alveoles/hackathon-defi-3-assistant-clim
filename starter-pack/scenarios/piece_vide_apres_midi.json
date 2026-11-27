@@ -1,0 +1,10 @@
+{
+  "base": "journee_type",
+  "description": "Toute l'équipe part en séminaire à midi et ne revient pas. Le planning annonce pourtant six personnes l'après-midi.",
+  "phrases": [
+    {"heure": "11:55", "occupant": "maya", "texte": "on part tous en séminaire, on ne revient pas cet après-midi"}
+  ],
+  "evenements": [
+    {"type": "absence", "heure": "13:30", "duree": 240, "occupants": "tous"}
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "base": "journee_type",
+  "description": "Vague de chaleur : jusqu'à 34 °C dehors, nuit chaude, ciel sans nuage. La clim est proche de sa limite.",
+  "meteo": {
+    "t_ext": [27.0, 26.5, 26.0, 26.0, 26.0, 26.5, 27.0, 28.0, 29.0, 30.0, 31.0, 32.0, 33.0, 33.5, 34.0, 34.0, 34.0, 33.5, 33.0, 32.0, 31.0, 30.0, 29.0, 28.0],
+    "nebulosite": [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+  }
+}

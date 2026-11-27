@@ -1,0 +1,9 @@
+{
+  "base": "journee_type",
+  "description": "La sonde de la pièce décroche plusieurs fois dans la journée et ne renvoie plus rien.",
+  "evenements": [
+    {"type": "panne_sonde", "heure": "09:15", "duree": 45, "mode": "absente"},
+    {"type": "panne_sonde", "heure": "14:00", "duree": 120, "mode": "absente"},
+    {"type": "panne_sonde", "heure": "16:30", "duree": 3, "mode": "pic", "valeur": -40.0}
+  ]
+}

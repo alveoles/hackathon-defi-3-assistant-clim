@@ -1,0 +1,16 @@
+{
+  "base": "journee_type",
+  "description": "Deux collègues se disputent la clim toute la matinée, de plus en plus fort, jusqu'aux demandes absurdes.",
+  "phrases": [
+    {"heure": "09:00", "occupant": "hugo", "texte": "j'ai chaud"},
+    {"heure": "09:10", "occupant": "maya", "texte": "j'ai froid, remonte"},
+    {"heure": "09:20", "occupant": "hugo", "texte": "il fait trop chaud, baisse encore"},
+    {"heure": "09:30", "occupant": "maya", "texte": "mais arrête, on gèle !"},
+    {"heure": "09:40", "occupant": "hugo", "texte": "mets 16"},
+    {"heure": "09:50", "occupant": "maya", "texte": "mets 30 degrés"},
+    {"heure": "10:00", "occupant": "hugo", "texte": "mets 10 degrés et la ventilation à fond"},
+    {"heure": "10:10", "occupant": "maya", "texte": "éteins cette clim"},
+    {"heure": "10:20", "occupant": "hugo", "texte": "rallume tout de suite"},
+    {"heure": "10:30", "occupant": "lea", "texte": "vous pouvez arrêter tous les deux ? laisse comme c'était"}
+  ]
+}

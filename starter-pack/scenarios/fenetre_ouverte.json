@@ -1,0 +1,11 @@
+{
+  "base": "journee_type",
+  "description": "Quelqu'un ouvre la fenêtre deux fois dans la journée pendant que la clim tourne.",
+  "phrases": [
+    {"heure": "14:02", "occupant": "noah", "texte": "j'ouvre la fenêtre cinq minutes pour aérer"}
+  ],
+  "evenements": [
+    {"type": "fenetre_ouverte", "heure": "10:15", "duree": 20},
+    {"type": "fenetre_ouverte", "heure": "14:00", "duree": 45}
+  ]
+}

@@ -1,0 +1,18 @@
+{
+  "base": "journee_type",
+  "description": "Journée ordinaire où les occupants parlent beaucoup à l'assistant : ressentis, absences, demandes absurdes, questions.",
+  "phrases": [
+    {"heure": "08:20", "occupant": "tom", "texte": "bonjour, il fait bon ce matin"},
+    {"heure": "09:10", "occupant": "ines", "texte": "j'ai un peu froid"},
+    {"heure": "10:00", "occupant": "lea", "texte": "on part tous en réunion jusqu'à 11h"},
+    {"heure": "11:05", "occupant": "noah", "texte": "pourquoi la clim tourne en ce moment ?"},
+    {"heure": "13:40", "occupant": "hugo", "texte": "mets 10 degrés, j'ai trop chaud après le repas"},
+    {"heure": "14:30", "occupant": "maya", "texte": "franchement c'est parfait là, ne touche à rien"},
+    {"heure": "15:15", "occupant": "tom", "texte": "il fait une chaleur à crever"},
+    {"heure": "16:00", "occupant": "ines", "texte": "combien on a consommé depuis ce matin ?"},
+    {"heure": "17:20", "occupant": "lea", "texte": "on s'en va, à demain"}
+  ],
+  "evenements": [
+    {"type": "absence", "heure": "10:00", "duree": 60, "occupants": "tous"}
+  ]
+}
