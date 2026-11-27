@@ -1,0 +1,8 @@
+{
+  "base": "journee_type",
+  "description": "Tout le monde est concentré et immobile : le détecteur de présence annonce une pièce vide alors qu'elle est pleine.",
+  "evenements": [
+    {"type": "pir_aveugle", "heure": "09:30", "duree": 40},
+    {"type": "pir_aveugle", "heure": "15:00", "duree": 75}
+  ]
+}

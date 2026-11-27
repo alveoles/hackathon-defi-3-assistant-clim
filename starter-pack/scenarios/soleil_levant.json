@@ -1,0 +1,8 @@
+{
+  "base": "journee_type",
+  "description": "Bureau côté est : le soleil tape le matin, et la sonde de la pièce le prend de plein fouet pendant une heure et demie.",
+  "piece": {"orientation": "est"},
+  "evenements": [
+    {"type": "panne_sonde", "heure": "08:30", "duree": 90, "mode": "soleil", "amplitude": 4.0}
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "base": "journee_type",
+  "description": "La sonde de la pièce enchaîne les pannes : elle se fige, affiche un pic aberrant, puis dérive tout l'après-midi.",
+  "evenements": [
+    {"type": "panne_sonde", "heure": "10:30", "duree": 90, "mode": "figee"},
+    {"type": "panne_sonde", "heure": "13:45", "duree": 2, "mode": "pic", "valeur": 85.0},
+    {"type": "panne_sonde", "heure": "14:30", "duree": 180, "mode": "derive", "amplitude": 2.5}
+  ]
+}

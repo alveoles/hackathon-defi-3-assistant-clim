@@ -1,0 +1,10 @@
+{
+  "base": "journee_type",
+  "description": "Quatre visiteurs débarquent à 15h pour une réunion qui n'était pas au planning : dix personnes dans la pièce.",
+  "phrases": [
+    {"heure": "14:55", "occupant": "lea", "texte": "des clients arrivent dans 5 minutes, on sera dix pendant une heure et demie"}
+  ],
+  "evenements": [
+    {"type": "visiteurs", "heure": "15:00", "duree": 90, "nb": 4}
+  ]
+}

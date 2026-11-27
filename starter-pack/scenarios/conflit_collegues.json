@@ -1,0 +1,16 @@
+{
+  "base": "journee_type",
+  "description": "Tom a toujours chaud, Ines a toujours froid : aucune température ne convient aux deux. À l'assistant d'arbitrer.",
+  "occupants": [
+    {"id": "lea", "preference": 24.5, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "tom", "preference": 23.0, "tolerance": 1.0, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "ines", "preference": 26.0, "tolerance": 1.0, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "noah", "preference": 24.5, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "maya", "preference": 25.0, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "hugo", "preference": 24.0, "horaires": "08:00-12:00,13:30-17:30"}
+  ],
+  "phrases": [
+    {"heure": "09:30", "occupant": "tom", "texte": "on étouffe, tu peux baisser de deux degrés ?"},
+    {"heure": "09:40", "occupant": "ines", "texte": "ah non, moi j'ai déjà froid, ne baisse pas"}
+  ]
+}
