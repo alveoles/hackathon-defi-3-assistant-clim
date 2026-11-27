@@ -1,0 +1,25 @@
+{
+  "description": "Journée de bureau ordinaire en décembre : beau temps, six occupants, aucune panne.",
+  "graine": 2026,
+  "piece": {"orientation": "ouest"},
+  "meteo": {
+    "t_ext": [24.0, 23.5, 23.0, 23.0, 23.0, 23.5, 24.0, 25.0, 26.0, 27.0, 28.0, 29.0, 30.0, 30.5, 31.0, 31.0, 31.0, 30.5, 30.0, 29.0, 28.0, 27.0, 26.0, 25.0],
+    "nebulosite": [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1],
+    "erreur_prevision": 1.5
+  },
+  "limites": {"consigne_min": 22, "consigne_max": 27},
+  "occupants": [
+    {"id": "lea", "preference": 24.5, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "tom", "preference": 24.0, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "ines", "preference": 25.0, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "noah", "preference": 24.5, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "maya", "preference": 25.0, "horaires": "08:00-12:00,13:30-17:30"},
+    {"id": "hugo", "preference": 24.0, "horaires": "08:00-12:00,13:30-17:30"}
+  ],
+  "planning": [
+    {"debut": "08:00", "fin": "12:00", "nb": 6},
+    {"debut": "13:30", "fin": "17:30", "nb": 6}
+  ],
+  "phrases": [],
+  "evenements": []
+}
