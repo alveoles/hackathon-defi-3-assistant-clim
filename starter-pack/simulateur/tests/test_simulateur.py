@@ -218,6 +218,44 @@ class OccupantsEtMessages(unittest.TestCase):
         self.assertEqual(bilan["minutes_personne_inconfort"], 6 * bilan["minutes_inconfort"])
         self.assertFalse(bilan["budget_confort"]["respecte"])
 
+    def test_le_budget_de_confort_depend_du_nombre_d_occupants_prevus(self):
+        self.assertEqual(simuler(scenario(), consigne_fixe(25))["bilan"]["budget_confort"],
+                         {"limite_minutes_personne": 45, "respecte": True})
+        a_huit = scenario(planning=[{"debut": "08:00", "fin": "12:00", "nb": 8}])
+        self.assertEqual(simuler(a_huit, sans_clim())["bilan"]["budget_confort"]["limite_minutes_personne"], 60)
+
+    def test_un_pic_de_deux_minutes_sur_la_sonde_ne_fait_pas_perdre_le_budget(self):
+        charge = scenario(evenements=[evenement("panne_sonde", "15:00", 2, mode="pic", valeur=-40.0)])
+        bilan = simuler(charge, consigne_fixe(25))["bilan"]
+        self.assertTrue(bilan["budget_confort"]["respecte"], bilan["minutes_personne_inconfort"])
+
+    def test_le_bruit_des_sondes_ne_se_devine_pas_avec_la_seule_graine(self):
+        import random
+        alea = random.Random("%s-sondes" % scenario()["graine"])
+        devinees = 0
+        for ligne in simuler(scenario(), sans_clim(), jusqu=120)["lignes"]:
+            bruit_piece, _bruit_reprise = alea.uniform(-0.2, 0.2), alea.uniform(-0.2, 0.2)
+            if abs(ligne["t_piece"] - (ligne["t_reelle"] + bruit_piece)) < 0.051:
+                devinees += 1
+        self.assertLess(devinees, 100, "le bruit ne doit pas se déduire de la graine du scénario")
+
+    def test_une_variation_infime_de_consigne_ne_compte_pas_comme_une_action(self):
+        def decider(etat):  # change la consigne commandée de 0,01 °C à chaque message, sans rien faire
+            return {"marche": False, "consigne": 26.0 + 0.01 * etat["minute"] % 0.2}
+
+        bilan = simuler(scenario(), ControleurFonction(decider), jusqu=10 * 60)["bilan"]
+        self.assertGreater(bilan["plaintes"], 0)
+        self.assertEqual(bilan["plaintes_sans_effet"], bilan["plaintes"])
+        self.assertEqual(bilan["changements_de_consigne"], 0)
+
+    def test_la_consigne_s_arrondit_au_demi_degre_le_plus_proche(self):
+        vus = []
+        consignes = iter([24.25, 24.75, 24.2, 24.8])
+        simuler(scenario(), ControleurFonction(
+            lambda etat: vus.append(etat["split"]["consigne"]) or {"marche": True, "consigne": next(consignes, 24.8)}),
+            jusqu=5)
+        self.assertEqual(vus[1:], [24.5, 25.0, 24.0, 25.0])
+
     def test_une_phrase_du_scenario_arrive_a_sa_minute_et_la_reponse_est_enregistree(self):
         charge = scenario(phrases=[{"heure": "10:15", "occupant": "lea", "texte": "on part en réunion jusqu'à 11h"}])
         recus = []
@@ -260,6 +298,35 @@ class OccupantsEtMessages(unittest.TestCase):
         self.assertGreater(bilan["plaintes"], 0)
         self.assertLess(bilan["plaintes_sans_effet"], bilan["plaintes"])
 
+    def test_une_plainte_a_laquelle_l_assistant_repond_n_est_pas_sans_effet(self):
+        def decider(etat):
+            return {"reponses": [{"message": m["id"], "texte": "La clim est en panne, désolé."} for m in etat["messages"]]}
+
+        bilan = simuler(scenario(), ControleurFonction(decider), jusqu=10 * 60)["bilan"]
+        self.assertGreater(bilan["plaintes"], 0)
+        self.assertEqual(bilan["plaintes_sans_effet"], 0)
+
+    def test_changer_la_consigne_dans_le_mauvais_sens_laisse_la_plainte_sans_effet(self):
+        etat_interne = {"consigne": 26.0}
+
+        def decider(etat):
+            if etat["messages"]:  # ils ont chaud, et on remonte la consigne
+                etat_interne["consigne"] += 0.5
+            return {"marche": False, "consigne": etat_interne["consigne"]}
+
+        bilan = simuler(scenario(), ControleurFonction(decider), jusqu=10 * 60)["bilan"]
+        self.assertGreater(bilan["plaintes"], 0)
+        self.assertEqual(bilan["plaintes_sans_effet"], bilan["plaintes"])
+
+    def test_une_reponse_vide_ne_compte_pas_comme_une_reponse(self):
+        def decider(etat):
+            return {"reponses": [{"message": m["id"], "texte": "  "} for m in etat["messages"]]}
+
+        bilan = simuler(scenario(), ControleurFonction(decider), jusqu=10 * 60)["bilan"]
+        self.assertGreater(bilan["messages"], 0)
+        self.assertEqual(bilan["messages_sans_reponse"], bilan["messages"])
+        self.assertEqual(bilan["plaintes_sans_effet"], bilan["plaintes"])
+
     def test_sans_plaintes_auto_la_journee_ne_contient_que_les_phrases_du_scenario(self):
         self.assertEqual(simuler(scenario(), sans_clim(), plaintes_auto=False)["bilan"]["messages"], 0)
 
@@ -279,12 +346,14 @@ class OccupantsEtMessages(unittest.TestCase):
 class ReponsesInvalides(unittest.TestCase):
     def test_une_reponse_invalide_garde_la_derniere_commande_et_signale_l_erreur(self):
         reponses = iter([{"marche": True, "consigne": 24}, "n'importe quoi", {"consigne": "froid"},
-                         {"ventilation": "turbo"}, {"reponses": [{"message": "m99", "texte": "?"}]}])
+                         {"ventilation": "turbo"}, {"reponses": [{"message": "m99", "texte": "?"}]},
+                         {"consinge": 20}])
         resultat = simuler(scenario(), ControleurFonction(lambda etat: next(reponses, {})), jusqu=10)
         lignes = resultat["lignes"]
         self.assertTrue(all(l["marche"] and l["consigne"] == 24 for l in lignes))
-        self.assertEqual([bool(l["erreur"]) for l in lignes[:6]], [False, True, True, True, True, False])
-        self.assertEqual(resultat["bilan"]["erreurs_controleur"], 4)
+        self.assertEqual([bool(l["erreur"]) for l in lignes[:7]], [False, True, True, True, True, True, False])
+        self.assertIn("champ inconnu : consinge", lignes[5]["erreur"])
+        self.assertEqual(resultat["bilan"]["erreurs_controleur"], 5)
 
 
 class ScenariosFichiers(unittest.TestCase):
@@ -350,6 +419,25 @@ class ControleurLanceAPart(unittest.TestCase):
         """ % str(simulate.CONTROLEUR_EXEMPLE.parent))
         bilan = simuler(scenario(), ControleurProcessus(commande), jusqu=3)["bilan"]
         self.assertEqual(bilan["erreurs_controleur"], 0)
+
+    def test_un_print_de_debug_sur_la_sortie_standard_est_signale_sans_decaler_les_commandes(self):
+        commande = ecrire_controleur(self.dossier, """
+            import json, sys
+            for ligne in sys.stdin:
+                message = json.loads(ligne)
+                if message["type"] == "fin":
+                    break
+                print("debug : je reçois", message["type"])
+                reponse = {"pret": True}
+                if message["type"] == "pas":
+                    reponse = {"marche": True, "consigne": 20 + message["minute"]}
+                print(json.dumps(reponse), flush=True)
+        """)
+        resultat = simuler(scenario(), ControleurProcessus(commande), jusqu=6)
+        self.assertEqual([l["consigne_demandee"] for l in resultat["lignes"]], [20, 21, 22, 23, 24, 25])
+        self.assertIn("ligne ignorée", resultat["lignes"][0]["erreur"])
+        self.assertIn("debug : je reçois", resultat["lignes"][0]["erreur"])
+        self.assertEqual(resultat["bilan"]["erreurs_controleur"], 6)
 
     def test_un_controleur_trop_lent_garde_sa_derniere_commande_sans_decaler_la_suite(self):
         commande = ecrire_controleur(self.dossier, """
@@ -427,6 +515,15 @@ class LigneDeCommande(unittest.TestCase):
         self.assertEqual(execution.returncode, 0, execution.stdout + execution.stderr)
         self.assertNotIn("✘", execution.stdout)
 
+    def test_un_run_qui_echoue_ne_laisse_pas_l_ancien_bilan_en_place(self):
+        self.assertEqual(self.lancer("--jusqu", "01:00").returncode, 0)
+        bilan = self.sortie / "journee_type" / "bilan.json"
+        self.assertTrue(bilan.is_file())
+        commande = ecrire_controleur(self._dossier.name, "raise SystemExit(1)")
+        self.assertEqual(self.lancer("--controleur", commande).returncode, 2)
+        self.assertFalse(bilan.exists())
+        self.assertFalse((self.sortie / "journee_type" / "journee.csv").exists())
+
     def test_un_scenario_invalide_ou_un_controleur_absent_donne_une_erreur_claire(self):
         execution = self.lancer("--scenario", "inexistant")
         self.assertEqual(execution.returncode, 2)
@@ -434,6 +531,11 @@ class LigneDeCommande(unittest.TestCase):
         execution = self.lancer("--controleur", "programme_qui_n_existe_pas_du_tout")
         self.assertEqual(execution.returncode, 2)
         self.assertIn("impossible de lancer", execution.stderr)
+
+    def test_dire_une_phrase_sans_demo_en_cours_est_refuse(self):
+        execution = self.lancer("--dire", "lea: j'ai chaud")
+        self.assertEqual(execution.returncode, 2)
+        self.assertIn("aucune démo en cours", execution.stderr)
 
     def test_une_phrase_dite_en_direct_arrive_au_controleur_pendant_la_demo(self):
         recus = Path(self._dossier.name) / "recus.txt"
@@ -458,6 +560,7 @@ class LigneDeCommande(unittest.TestCase):
         self.assertEqual(self.lancer("--dire", "il fait bon ici").returncode, 0)
         demo.communicate(timeout=60)
         self.assertEqual(demo.returncode, 0)
+        self.assertEqual(self.lancer("--dire", "trop tard").returncode, 2, "la démo est terminée")
         self.assertEqual(recus.read_text(encoding="utf-8").splitlines(),
                          ["client|mets 10 degrés", "client|il fait bon ici"])
 

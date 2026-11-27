@@ -50,9 +50,9 @@ Dans un autre langage, il suffit de lire l'entrée standard ligne par ligne et d
 
 ## 2. Les trois règles à ne pas rater
 
-1. **La sortie standard est réservée au protocole.** Un `print()` de debug casse l'échange. Écris tes logs sur la **sortie d'erreur** (elle s'affiche dans ton terminal). Avec `protocole.py`, tes `print()` y sont envoyés automatiquement.
+1. **La sortie standard est réservée au protocole.** Écris tes logs sur la **sortie d'erreur** (elle s'affiche dans ton terminal). Avec `protocole.py`, tes `print()` y sont envoyés automatiquement. Sans lui, le simulateur ignore toute ligne qui n'est pas un objet JSON et le signale dans la colonne `erreur` du CSV.
 2. **Une ligne reçue, une ligne renvoyée**, et il faut **vider le tampon** après chaque ligne (`flush`). Sinon le simulateur attend pour rien.
-3. **Réponds vite.** Tu as 30 secondes par minute simulée (120 secondes pour `init`). Passé ce délai, le simulateur garde ta dernière commande, note l'erreur dans le CSV, et continue. Ta réponse en retard est ignorée.
+3. **Réponds vite.** Tu as 30 secondes par minute simulée (120 secondes pour `init`). Passé ce délai, le simulateur garde ta dernière commande, note l'erreur dans le CSV, et continue. Ta réponse en retard est ignorée. Les réponses aux occupants qu'elle contenait sont donc perdues.
 
 ---
 
@@ -63,8 +63,7 @@ Reçu une seule fois, avant la minute 0. C'est le moment de charger ton modèle 
 ```json
 {
   "type": "init",
-  "version": "1.0.0",
-  "scenario": "journee_type",
+  "version": "1.1.0",
   "limites": {"consigne_min": 22, "consigne_max": 27},
   "plage_confort": [23.0, 26.0],
   "occupants": ["lea", "tom", "ines", "noah", "maya", "hugo"],
@@ -159,7 +158,7 @@ Reçu à chaque minute, de la minute 0 (00:00) à la minute 1439 (23:59).
 
 **Tous les champs sont facultatifs. Un champ absent garde sa valeur précédente.** Répondre `{}` veut dire « je ne change rien ». Au départ, la clim est à l'arrêt, consigne 25 °C, ventilation `auto`.
 
-Si ta réponse n'est pas du JSON valide, ou si un champ a une valeur impossible, le simulateur ignore ce qui est faux, garde le reste, et note l'erreur dans la colonne `erreur` du CSV.
+Si un champ a une valeur impossible ou un nom inconnu (une faute de frappe comme `consinge`), le simulateur ignore ce champ, garde le reste, et note l'erreur dans la colonne `erreur` du CSV. Le bilan compte ces erreurs (`erreurs_controleur`) : il doit rester à 0.
 
 ---
 
@@ -259,7 +258,8 @@ Les heures s'écrivent `"HH:MM"`, les durées en minutes. `journee_type.json` mo
 |---|---|
 | `le contrôleur s'est arrêté` | Ton programme a planté. Son message d'erreur est affiché juste au-dessus |
 | `n'a pas répondu au message "init"` | Tu ne réponds pas à `init`, ou tu ne vides pas le tampon de sortie |
-| La colonne `erreur` contient `réponse invalide` | Un `print()` de debug est parti sur la sortie standard |
+| La colonne `erreur` contient `ligne ignorée` | Un `print()` de debug est parti sur la sortie standard |
+| La colonne `erreur` contient `champ inconnu` | Une faute de frappe dans le nom d'un champ de ta réponse |
 | La colonne `erreur` contient `délai dépassé` | Ton contrôleur est trop lent, souvent un appel au modèle de langage à chaque minute |
 | Deux lancements ne donnent pas le même bilan | Ton contrôleur n'est pas déterministe (modèle de langage, hasard, heure réelle) |
 
