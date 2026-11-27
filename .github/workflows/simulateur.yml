@@ -1,0 +1,35 @@
+name: simulateur
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  tests:
+    name: tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, python: "3.9" }
+          - { os: ubuntu-latest, python: "3.13" }
+          - { os: macos-latest, python: "3.13" }
+          - { os: windows-latest, python: "3.9" }
+          - { os: windows-latest, python: "3.13" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Tests du simulateur
+        run: python -m unittest discover -s starter-pack/simulateur/tests -v
+      - name: Le simulateur se comporte comme annoncé
+        run: python starter-pack/simulateur/simulate.py --verifier
+      - name: Tous les scénarios sont valides
+        shell: bash
+        run: |
+          for fichier in starter-pack/scenarios/*.json; do
+            python starter-pack/simulateur/simulate.py --valider "$fichier"
+          done
